@@ -1,6 +1,4 @@
-variables:
-- group: AzureStaticWebAppToken
-  jobs:trigger:
+trigger:
   branches:
     include:
       - main
@@ -10,15 +8,16 @@ variables:
 pool:
   vmImage: ubuntu-latest
 variables:
-  azureServiceConnection: 'YourServiceConnectionName'   # <-- yeh neeche wali detail se update karein
-  webAppName: 'Devops31'
-  nodeVersion: '22.x'
+- group: AzureStaticWebAppToken
+- name: nodeVersion
+  value: '22.x'
 stages:
 # ======================================================
 # STAGE 1: VALIDATE AND BUILD
 # ======================================================
 - stage: Build
   displayName: Build ValeurTech Website
+  jobs:
   - job: BuildWebsite
     displayName: Validate and Package Application
     steps:
@@ -35,10 +34,6 @@ stages:
           echo "ERROR: index.html was not found."
           exit 1
         }
-        test -f "$(Build.SourcesDirectory)/server.js" || {
-          echo "ERROR: server.js was not found."
-          exit 1
-        }
         test -f "$(Build.SourcesDirectory)/package.json" || {
           echo "ERROR: package.json was not found."
           exit 1
@@ -49,56 +44,23 @@ stages:
         npm install
       workingDirectory: '$(Build.SourcesDirectory)'
       displayName: Install Node Dependencies
-    - script: |
-        npm start &
-        APP_PID=$!
-        sleep 5
-        curl --fail http://localhost:8080/ > /dev/null
-        curl --fail http://localhost:8080/index.html > /dev/null
-        kill $APP_PID
-        echo "Website startup test passed."
-      workingDirectory: '$(Build.SourcesDirectory)'
-      displayName: Test Website Locally
-    - task: ArchiveFiles@2
-      displayName: Create Deployment Package
-      inputs:
-        rootFolderOrFile: '$(Build.SourcesDirectory)'
-        includeRootFolder: false
-        archiveType: zip
-        archiveFile: '$(Build.ArtifactStagingDirectory)/valeurtech.zip'
-        replaceExistingArchive: true
-    - task: PublishPipelineArtifact@1
-      displayName: Publish Deployment Artifact
-      inputs:
-        targetPath: '$(Build.ArtifactStagingDirectory)/valeurtech.zip'
-        artifact: valeurtech
 # ======================================================
-# STAGE 2: DEPLOY
+# STAGE 2: DEPLOY TO STATIC WEB APP
 # ======================================================
 - stage: Deploy
-  displayName: Deploy to Azure Web App
+  displayName: Deploy to Azure Static Web App
   dependsOn: Build
   condition: succeeded()
   jobs:
-  - deployment: DeployWebsite
+  - job: DeployStaticWebApp
     displayName: Deploy ValeurTech Website
-    environment: production
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - checkout: none
-          - task: DownloadPipelineArtifact@2
-            displayName: Download Deployment Package
-            inputs:
-              buildType: current
-              artifactName: valeurtech
-              targetPath: '$(Pipeline.Workspace)/valeurtech'
-          - task: AzureWebApp@1
-            displayName: Deploy to Azure App Service
-            inputs:
-              azureSubscription: '$(azureServiceConnection)'
-              appType: webApp
-              appName: '$(webAppName)'
-              package: '$(Pipeline.Workspace)/valeurtech/valeurtech.zip'
-              deploymentMethod: zipDeploy
+    steps:
+    - checkout: self
+      clean: true
+    - task: AzureStaticWebApp@0
+      displayName: Deploy to Azure Static Web App
+      inputs:
+        app_location: '/'
+        api_location: ''
+        output_location: ''
+        azure_static_web_apps_api_token: '$(AzureStaticWebAppToken)'
