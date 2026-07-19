@@ -1,17 +1,103 @@
-# HTML
-# Archive your static HTML project and save it with the build record.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
-- main
-
+  branches:
+    include:
+      - main
+  paths:
+    exclude:
+      - README.md
 pool:
   vmImage: ubuntu-latest
-
-steps:
-- task: ArchiveFiles@2
-  inputs:
-    rootFolderOrFile: '$(build.sourcesDirectory)'
-    includeRootFolder: false
-- task: PublishBuildArtifacts@1
+variables:
+  azureServiceConnection: 'YourServiceConnectionName'   # <-- yeh neeche wali detail se update karein
+  webAppName: 'Devops31'
+  nodeVersion: '22.x'
+stages:
+# ======================================================
+# STAGE 1: VALIDATE AND BUILD
+# ======================================================
+- stage: Build
+  displayName: Build ValeurTech Website
+  jobs:
+  - job: BuildWebsite
+    displayName: Validate and Package Application
+    steps:
+    - checkout: self
+      clean: true
+    - task: NodeTool@0
+      displayName: Use Node.js 22
+      inputs:
+        versionSpec: '$(nodeVersion)'
+    - script: |
+        set -e
+        echo "Checking required files..."
+        test -f "$(Build.SourcesDirectory)/index.html" || {
+          echo "ERROR: index.html was not found."
+          exit 1
+        }
+        test -f "$(Build.SourcesDirectory)/server.js" || {
+          echo "ERROR: server.js was not found."
+          exit 1
+        }
+        test -f "$(Build.SourcesDirectory)/package.json" || {
+          echo "ERROR: package.json was not found."
+          exit 1
+        }
+        echo "Required files found."
+      displayName: Validate Application Files
+    - script: |
+        npm install
+      workingDirectory: '$(Build.SourcesDirectory)'
+      displayName: Install Node Dependencies
+    - script: |
+        npm start &
+        APP_PID=$!
+        sleep 5
+        curl --fail http://localhost:8080/ > /dev/null
+        curl --fail http://localhost:8080/index.html > /dev/null
+        kill $APP_PID
+        echo "Website startup test passed."
+      workingDirectory: '$(Build.SourcesDirectory)'
+      displayName: Test Website Locally
+    - task: ArchiveFiles@2
+      displayName: Create Deployment Package
+      inputs:
+        rootFolderOrFile: '$(Build.SourcesDirectory)'
+        includeRootFolder: false
+        archiveType: zip
+        archiveFile: '$(Build.ArtifactStagingDirectory)/valeurtech.zip'
+        replaceExistingArchive: true
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Deployment Artifact
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/valeurtech.zip'
+        artifact: valeurtech
+# ======================================================
+# STAGE 2: DEPLOY
+# ======================================================
+- stage: Deploy
+  displayName: Deploy to Azure Web App
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - deployment: DeployWebsite
+    displayName: Deploy ValeurTech Website
+    environment: production
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: none
+          - task: DownloadPipelineArtifact@2
+            displayName: Download Deployment Package
+            inputs:
+              buildType: current
+              artifactName: valeurtech
+              targetPath: '$(Pipeline.Workspace)/valeurtech'
+          - task: AzureWebApp@1
+            displayName: Deploy to Azure App Service
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appType: webApp
+              appName: '$(webAppName)'
+              package: '$(Pipeline.Workspace)/valeurtech/valeurtech.zip'
+              deploymentMethod: zipDeploy
