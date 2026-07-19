@@ -1,4 +1,6 @@
-trigger:
+variables:
+- group: AzureStaticWebAppToken
+  jobs:trigger:
   branches:
     include:
       - main
@@ -17,7 +19,6 @@ stages:
 # ======================================================
 - stage: Build
   displayName: Build ValeurTech Website
-  jobs:
   - job: BuildWebsite
     displayName: Validate and Package Application
     steps:
