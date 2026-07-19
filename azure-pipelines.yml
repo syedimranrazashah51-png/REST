@@ -13,18 +13,18 @@ variables:
   value: '22.x'
 stages:
 # ======================================================
-# STAGE 1: VALIDATE AND BUILD
+# STAGE 1: BUILD
 # ======================================================
 - stage: Build
-  displayName: Build ValeurTech Website
+  displayName: 'Build'
   jobs:
   - job: BuildWebsite
-    displayName: Validate and Package Application
+    displayName: 'Validate and Package Application'
     steps:
     - checkout: self
       clean: true
     - task: NodeTool@0
-      displayName: Use Node.js 22
+      displayName: 'Use Node.js 22'
       inputs:
         versionSpec: '$(nodeVersion)'
     - script: |
@@ -39,26 +39,27 @@ stages:
           exit 1
         }
         echo "Required files found."
-      displayName: Validate Application Files
+      displayName: 'Validate Application Files'
     - script: |
         npm install
       workingDirectory: '$(Build.SourcesDirectory)'
-      displayName: Install Node Dependencies
+      displayName: 'Install Node Dependencies'
+
 # ======================================================
-# STAGE 2: DEPLOY TO STATIC WEB APP
+# STAGE 2: DEPLOY
 # ======================================================
 - stage: Deploy
-  displayName: Deploy to Azure Static Web App
+  displayName: 'Deploy'
   dependsOn: Build
   condition: succeeded()
   jobs:
   - job: DeployStaticWebApp
-    displayName: Deploy ValeurTech Website
+    displayName: 'Deploy ValeurTech Website'
     steps:
     - checkout: self
       clean: true
     - task: AzureStaticWebApp@0
-      displayName: Deploy to Azure Static Web App
+      displayName: 'Deploy to Azure Static Web App'
       inputs:
         app_location: '/'
         api_location: ''
