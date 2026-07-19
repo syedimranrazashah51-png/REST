@@ -1,19 +1,67 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
-- main
-
+  branches:
+    include:
+      - main
+  paths:
+    exclude:
+      - README.md
 pool:
   vmImage: ubuntu-latest
+variables:
+- group: AzureStaticWebAppToken
+- name: nodeVersion
+  value: '22.x'
+stages:
+# ======================================================
+# STAGE 1: BUILD
+# ======================================================
+- stage: Build
+  displayName: 'Build'
+  jobs:
+  - job: BuildWebsite
+    displayName: 'Validate and Package Application'
+    steps:
+    - checkout: self
+      clean: true
+    - task: NodeTool@0
+      displayName: 'Use Node.js 22'
+      inputs:
+        versionSpec: '$(nodeVersion)'
+    - script: |
+        set -e
+        echo "Checking required files..."
+        test -f "$(Build.SourcesDirectory)/index.html" || {
+          echo "ERROR: index.html was not found."
+          exit 1
+        }
+        test -f "$(Build.SourcesDirectory)/package.json" || {
+          echo "ERROR: package.json was not found."
+          exit 1
+        }
+        echo "Required files found."
+      displayName: 'Validate Application Files'
+    - script: |
+        npm install
+      workingDirectory: '$(Build.SourcesDirectory)'
+      displayName: 'Install Node Dependencies'
 
-steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
-
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+# ======================================================
+# STAGE 2: DEPLOY
+# ======================================================
+- stage: Deploy
+  displayName: 'Deploy'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - job: DeployStaticWebApp
+    displayName: 'Deploy ValeurTech Website'
+    steps:
+    - checkout: self
+      clean: true
+    - task: AzureStaticWebApp@0
+      displayName: 'Deploy to Azure Static Web App'
+      inputs:
+        app_location: '/'
+        api_location: ''
+        output_location: ''
+        azure_static_web_apps_api_token: '$(AzureStaticWebAppToken)'
